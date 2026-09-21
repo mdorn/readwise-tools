@@ -12,6 +12,8 @@ class Document:
     url: str | None
     source_url: str | None
     category: str | None
+    published_date: datetime | None = None
+    html_content: str | None = None
 
     @classmethod
     def from_api(cls, data: dict) -> Document:
@@ -24,6 +26,12 @@ class Document:
             url=data.get("url"),
             source_url=data.get("source_url"),
             category=data.get("category"),
+            published_date=(
+                _parse_iso8601(data["published_date"])
+                if data.get("published_date")
+                else None
+            ),
+            html_content=data.get("html_content"),
         )
 
 

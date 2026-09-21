@@ -3,7 +3,14 @@ import os
 import sys
 from datetime import UTC, datetime, timedelta
 
-from readwise_tools.client import ReadwiseAPIError, ReadwiseAuthError, fetch_documents
+from readwise_tools.client import (
+    ReadwiseAPIError,
+    ReadwiseAuthError,
+    ReadwiseNotFoundError,
+    fetch_document_by_id,
+    fetch_documents,
+)
+from readwise_tools.rendering import render_document
 
 LOCATION_ALIASES: dict[str, str] = {
     "inbox": "new",
@@ -33,6 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_parser.set_defaults(func=run_list)
 
+    get_parser = subparsers.add_parser(
+        "get", help="Fetch and render a single document by ID"
+    )
+    get_parser.add_argument("document_id", help="Readwise Reader document ID")
+    get_parser.set_defaults(func=run_get)
+
     return parser
 
 
@@ -52,6 +65,17 @@ def run_list(args: argparse.Namespace, token: str, now: datetime | None = None) 
 
     for doc in matching:
         print(doc.title)
+    return 0
+
+
+def run_get(args: argparse.Namespace, token: str) -> int:
+    try:
+        document = fetch_document_by_id(token=token, doc_id=args.document_id)
+    except (ReadwiseAuthError, ReadwiseAPIError, ReadwiseNotFoundError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    print(render_document(document))
     return 0
 
 

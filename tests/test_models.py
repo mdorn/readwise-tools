@@ -41,6 +41,21 @@ def test_from_api_handles_missing_optional_fields():
     assert doc.source_url is None
     assert doc.category is None
     assert doc.url is None
+    assert doc.published_date is None
+    assert doc.html_content is None
+
+
+def test_from_api_parses_published_date_and_html_content_when_present():
+    data = {
+        **FULL_DOC,
+        "published_date": "2026-08-01T00:00:00Z",
+        "html_content": "<p>Hello <strong>world</strong></p>",
+    }
+
+    doc = Document.from_api(data)
+
+    assert doc.published_date == datetime(2026, 8, 1, tzinfo=UTC)
+    assert doc.html_content == "<p>Hello <strong>world</strong></p>"
 
 
 def test_from_api_defaults_title_when_blank():

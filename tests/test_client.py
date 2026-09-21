@@ -7,6 +7,8 @@ import requests
 from readwise_tools.client import (
     ReadwiseAPIError,
     ReadwiseAuthError,
+    ReadwiseNotFoundError,
+    fetch_document_by_id,
     fetch_documents,
 )
 
@@ -104,3 +106,55 @@ def test_fetch_documents_sends_correct_query_params(mock_get):
     _, kwargs = mock_get.call_args
     assert kwargs["params"]["location"] == "archive"
     assert kwargs["params"]["updatedAfter"] == UPDATED_AFTER.isoformat()
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_returns_document_on_success(mock_get):
+    mock_get.return_value = _mock_response({"results": [_raw_doc("a")]})
+
+    doc = fetch_document_by_id("tok", "a")
+
+    assert doc.id == "a"
+    assert mock_get.call_count == 1
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_sends_correct_query_params(mock_get):
+    mock_get.return_value = _mock_response({"results": [_raw_doc("a")]})
+
+    fetch_document_by_id("tok", "a")
+
+    _, kwargs = mock_get.call_args
+    assert kwargs["params"] == {"id": "a", "withHtmlContent": "true"}
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_raises_not_found_when_results_empty(mock_get):
+    mock_get.return_value = _mock_response({"results": []})
+
+    with pytest.raises(ReadwiseNotFoundError, match="a"):
+        fetch_document_by_id("tok", "a")
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_raises_auth_error_on_401(mock_get):
+    mock_get.return_value = _mock_response({}, status_code=401)
+
+    with pytest.raises(ReadwiseAuthError):
+        fetch_document_by_id("bad-tok", "a")
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_raises_api_error_on_429(mock_get):
+    mock_get.return_value = _mock_response({}, status_code=429)
+
+    with pytest.raises(ReadwiseAPIError, match="rate limit"):
+        fetch_document_by_id("tok", "a")
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_raises_on_other_http_error(mock_get):
+    mock_get.return_value = _mock_response({}, status_code=500)
+
+    with pytest.raises(requests.HTTPError):
+        fetch_document_by_id("tok", "a")

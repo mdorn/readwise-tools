@@ -16,6 +16,34 @@ class ReadwiseAPIError(RuntimeError):
     """Raised for other non-2xx API responses that aren't recoverable."""
 
 
+class ReadwiseNotFoundError(RuntimeError):
+    """Raised when no document matches the requested id."""
+
+
+def fetch_document_by_id(token: str, doc_id: str) -> Document:
+    """Fetch a single Reader document by id, including its HTML content."""
+    headers = {"Authorization": f"Token {token}"}
+    params = {"id": doc_id, "withHtmlContent": "true"}
+
+    response = requests.get(API_BASE_URL, headers=headers, params=params, timeout=30)
+
+    if response.status_code == 401:
+        raise ReadwiseAuthError(
+            "Readwise rejected the access token. Check READWISE_TOKEN."
+        )
+    if response.status_code == 429:
+        raise ReadwiseAPIError(
+            "Readwise API rate limit hit (HTTP 429). Try again in a minute."
+        )
+    response.raise_for_status()
+
+    results = response.json().get("results", [])
+    if not results:
+        raise ReadwiseNotFoundError(f"No document found with id {doc_id!r}.")
+
+    return Document.from_api(results[0])
+
+
 def fetch_documents(
     token: str,
     location: str,
