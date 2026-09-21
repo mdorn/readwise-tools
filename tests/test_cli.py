@@ -144,6 +144,27 @@ def test_build_parser_get_subcommand_parses_document_id():
     assert args.func is run_get
 
 
+def test_build_parser_get_output_defaults_to_html():
+    parser = build_parser()
+    args = parser.parse_args(["get", "a"])
+
+    assert args.output == "html"
+
+
+def test_build_parser_get_output_accepts_markdown():
+    parser = build_parser()
+    args = parser.parse_args(["get", "a", "--output", "markdown"])
+
+    assert args.output == "markdown"
+
+
+def test_build_parser_get_output_rejects_invalid_choice(capsys):
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["get", "a", "--output", "bogus"])
+    capsys.readouterr()
+
+
 @patch("readwise_tools.cli.render_document")
 @patch("readwise_tools.cli.fetch_document_by_id")
 def test_run_get_happy_path_prints_rendered_output(mock_fetch, mock_render, capsys):
@@ -158,6 +179,20 @@ def test_run_get_happy_path_prints_rendered_output(mock_fetch, mock_render, caps
     assert exit_code == 0
     assert out == "RENDERED OUTPUT\n"
     mock_fetch.assert_called_once_with(token="tok", doc_id="a")
+    mock_render.assert_called_once_with(mock_fetch.return_value, "html")
+
+
+@patch("readwise_tools.cli.render_document")
+@patch("readwise_tools.cli.fetch_document_by_id")
+def test_run_get_passes_explicit_output_format(mock_fetch, mock_render):
+    mock_fetch.return_value = _doc("a", 1)
+    mock_render.return_value = "RENDERED OUTPUT"
+    parser = build_parser()
+    args = parser.parse_args(["get", "a", "--output", "markdown"])
+
+    run_get(args, token="tok")
+
+    mock_render.assert_called_once_with(mock_fetch.return_value, "markdown")
 
 
 @patch("readwise_tools.cli.fetch_document_by_id")
@@ -215,3 +250,4 @@ def test_main_dispatches_to_run_get_when_token_present(
     out = capsys.readouterr().out
     assert exit_code == 0
     assert "RENDERED" in out
+    mock_render.assert_called_once_with(mock_fetch.return_value, "html")

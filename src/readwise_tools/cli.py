@@ -44,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
         "get", help="Fetch and render a single document by ID"
     )
     get_parser.add_argument("document_id", help="Readwise Reader document ID")
+    get_parser.add_argument(
+        "--output",
+        choices=["html", "markdown"],
+        default="html",
+        help="Output format (default: html)",
+    )
     get_parser.set_defaults(func=run_get)
 
     return parser
@@ -75,7 +81,7 @@ def run_get(args: argparse.Namespace, token: str) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    print(render_document(document))
+    print(render_document(document, args.output))
     return 0
 
 
