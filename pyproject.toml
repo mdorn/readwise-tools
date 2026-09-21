@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-readwise-tools = "readwise_tools:main"
+readwise-tools = "readwise_tools.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
@@ -21,8 +21,15 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.8",
 ]
 
 [tool.ruff.lint]
 extend-select = ["B", "I", "UP"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=readwise_tools --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["readwise_tools"]

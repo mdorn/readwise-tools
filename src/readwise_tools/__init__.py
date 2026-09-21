@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from readwise-tools!")
+from readwise_tools.cli import main
+
+__all__ = ["main"]
