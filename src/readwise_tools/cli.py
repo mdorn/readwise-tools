@@ -64,7 +64,7 @@ def run_list(args: argparse.Namespace, token: str, now: datetime | None = None) 
         return 1
 
     for doc in matching:
-        print(doc.title)
+        print(f"{doc.id}\t{doc.title}")
     return 0
 
 

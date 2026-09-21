@@ -72,7 +72,7 @@ def test_run_list_filters_by_saved_at_window(mock_fetch, capsys):
 
 
 @patch("readwise_tools.cli.fetch_documents")
-def test_run_list_prints_only_titles(mock_fetch, capsys):
+def test_run_list_prints_id_and_title(mock_fetch, capsys):
     mock_fetch.return_value = [_doc("a", 1), _doc("b", 2)]
     parser = build_parser()
     args = parser.parse_args(["list", "archive"])
@@ -80,7 +80,7 @@ def test_run_list_prints_only_titles(mock_fetch, capsys):
     run_list(args, token="tok", now=NOW)
 
     lines = capsys.readouterr().out.splitlines()
-    assert lines == ["Title a", "Title b"]
+    assert lines == ["a\tTitle a", "b\tTitle b"]
 
 
 @patch("readwise_tools.cli.fetch_documents")
