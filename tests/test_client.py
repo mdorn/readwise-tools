@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from readwise_tools.client import (
+    _MAX_RETRIES,
     ReadwiseAPIError,
     ReadwiseAuthError,
     ReadwiseNotFoundError,
@@ -15,10 +16,13 @@ from readwise_tools.client import (
 UPDATED_AFTER = datetime(2026, 9, 1, tzinfo=UTC)
 
 
-def _mock_response(json_data: dict, status_code: int = 200) -> Mock:
+def _mock_response(
+    json_data: dict, status_code: int = 200, headers: dict | None = None
+) -> Mock:
     response = Mock()
     response.status_code = status_code
     response.json.return_value = json_data
+    response.headers = headers or {}
 
     def raise_for_status():
         if status_code >= 400:
@@ -81,12 +85,16 @@ def test_fetch_documents_raises_auth_error_on_401(mock_get):
         list(fetch_documents("bad-tok", "new", UPDATED_AFTER))
 
 
+@patch("readwise_tools.client.time.sleep")
 @patch("readwise_tools.client.requests.get")
-def test_fetch_documents_raises_api_error_on_429(mock_get):
+def test_fetch_documents_raises_api_error_on_429(mock_get, mock_sleep):
     mock_get.return_value = _mock_response({}, status_code=429)
 
     with pytest.raises(ReadwiseAPIError, match="rate limit"):
         list(fetch_documents("tok", "new", UPDATED_AFTER))
+
+    assert mock_get.call_count == _MAX_RETRIES + 1
+    assert mock_sleep.call_count == _MAX_RETRIES
 
 
 @patch("readwise_tools.client.requests.get")
@@ -144,12 +152,16 @@ def test_fetch_document_by_id_raises_auth_error_on_401(mock_get):
         fetch_document_by_id("bad-tok", "a")
 
 
+@patch("readwise_tools.client.time.sleep")
 @patch("readwise_tools.client.requests.get")
-def test_fetch_document_by_id_raises_api_error_on_429(mock_get):
+def test_fetch_document_by_id_raises_api_error_on_429(mock_get, mock_sleep):
     mock_get.return_value = _mock_response({}, status_code=429)
 
     with pytest.raises(ReadwiseAPIError, match="rate limit"):
         fetch_document_by_id("tok", "a")
+
+    assert mock_get.call_count == _MAX_RETRIES + 1
+    assert mock_sleep.call_count == _MAX_RETRIES
 
 
 @patch("readwise_tools.client.requests.get")
@@ -158,3 +170,60 @@ def test_fetch_document_by_id_raises_on_other_http_error(mock_get):
 
     with pytest.raises(requests.HTTPError):
         fetch_document_by_id("tok", "a")
+
+
+@patch("readwise_tools.client.time.sleep")
+@patch("readwise_tools.client.requests.get")
+def test_fetch_documents_retries_after_429_then_succeeds(mock_get, mock_sleep):
+    mock_get.side_effect = [
+        _mock_response({}, status_code=429, headers={"Retry-After": "2"}),
+        _mock_response({}, status_code=429, headers={"Retry-After": "2"}),
+        _mock_response({"results": [_raw_doc("a")], "nextPageCursor": None}),
+    ]
+
+    docs = list(fetch_documents("tok", "new", UPDATED_AFTER))
+
+    assert [d.id for d in docs] == ["a"]
+    assert mock_get.call_count == 3
+    assert mock_sleep.call_args_list == [((2.0,),), ((2.0,),)]
+
+
+@patch("readwise_tools.client.time.sleep")
+@patch("readwise_tools.client.requests.get")
+def test_fetch_document_by_id_retries_after_429_then_succeeds(mock_get, mock_sleep):
+    mock_get.side_effect = [
+        _mock_response({}, status_code=429, headers={"Retry-After": "2"}),
+        _mock_response({"results": [_raw_doc("a")]}),
+    ]
+
+    doc = fetch_document_by_id("tok", "a")
+
+    assert doc.id == "a"
+    assert mock_get.call_count == 2
+    mock_sleep.assert_called_once_with(2.0)
+
+
+@patch("readwise_tools.client.time.sleep")
+@patch("readwise_tools.client.requests.get")
+def test_retry_after_header_missing_uses_default(mock_get, mock_sleep):
+    mock_get.side_effect = [
+        _mock_response({}, status_code=429),
+        _mock_response({"results": [_raw_doc("a")]}),
+    ]
+
+    fetch_document_by_id("tok", "a")
+
+    mock_sleep.assert_called_once_with(5.0)
+
+
+@patch("readwise_tools.client.time.sleep")
+@patch("readwise_tools.client.requests.get")
+def test_retry_after_header_malformed_falls_back_to_default(mock_get, mock_sleep):
+    mock_get.side_effect = [
+        _mock_response({}, status_code=429, headers={"Retry-After": "not-a-number"}),
+        _mock_response({"results": [_raw_doc("a")]}),
+    ]
+
+    fetch_document_by_id("tok", "a")
+
+    mock_sleep.assert_called_once_with(5.0)
