@@ -9,7 +9,7 @@ A minimal command-line tool for working with your [Readwise Reader](https://read
 - A Readwise access token — get one at <https://readwise.io/access_token>
 - **Pango**, a system library required by [WeasyPrint](https://weasyprint.org/) for the `gazette` command's PDF generation only. Not managed by `uv`; install it separately, e.g. on macOS:
   ```sh
-  brew install weasyprint
+  brew install pango
   ```
 
 ## Installation
