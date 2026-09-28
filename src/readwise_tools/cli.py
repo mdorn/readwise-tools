@@ -117,14 +117,14 @@ def run_gazette(
     cutoff = now - timedelta(days=args.days)
 
     try:
-        summaries = fetch_documents(
-            token=token, location=api_location, updated_after=cutoff
+        fetched = fetch_documents(
+            token=token,
+            location=api_location,
+            updated_after=cutoff,
+            with_html_content=True,
         )
-        matching = [doc for doc in summaries if doc.saved_at >= cutoff]
-        documents = [
-            fetch_document_by_id(token=token, doc_id=doc.id) for doc in matching
-        ]
-    except (ReadwiseAuthError, ReadwiseAPIError, ReadwiseNotFoundError) as exc:
+        documents = [doc for doc in fetched if doc.saved_at >= cutoff]
+    except (ReadwiseAuthError, ReadwiseAPIError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 

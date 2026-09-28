@@ -43,12 +43,16 @@ def fetch_documents(
     token: str,
     location: str,
     updated_after: datetime,
+    with_html_content: bool = False,
 ) -> Iterator[Document]:
     """Yield Documents for every page of the Reader `list` endpoint.
 
     `updatedAfter` is only a server-side pre-filter (updated_at >= saved_at
     always holds, so this can't exclude a document that should match); callers
     must still apply their own authoritative filter on `saved_at`.
+
+    Pass `with_html_content=True` to include each document's HTML body in the
+    listing, avoiding a separate per-document fetch.
     """
     headers = {"Authorization": f"Token {token}"}
     page_cursor: str | None = None
@@ -58,6 +62,8 @@ def fetch_documents(
             "location": location,
             "updatedAfter": updated_after.isoformat(),
         }
+        if with_html_content:
+            params["withHtmlContent"] = "true"
         if page_cursor:
             params["pageCursor"] = page_cursor
 

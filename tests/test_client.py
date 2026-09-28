@@ -114,6 +114,20 @@ def test_fetch_documents_sends_correct_query_params(mock_get):
     _, kwargs = mock_get.call_args
     assert kwargs["params"]["location"] == "archive"
     assert kwargs["params"]["updatedAfter"] == UPDATED_AFTER.isoformat()
+    assert "withHtmlContent" not in kwargs["params"]
+
+
+@patch("readwise_tools.client.requests.get")
+def test_fetch_documents_sends_with_html_content_when_requested(mock_get):
+    mock_get.side_effect = [
+        _mock_response({"results": [_raw_doc("a")], "nextPageCursor": "abc123"}),
+        _mock_response({"results": [_raw_doc("b")], "nextPageCursor": None}),
+    ]
+
+    list(fetch_documents("tok", "new", UPDATED_AFTER, with_html_content=True))
+
+    for call in mock_get.call_args_list:
+        assert call.kwargs["params"]["withHtmlContent"] == "true"
 
 
 @patch("readwise_tools.client.requests.get")

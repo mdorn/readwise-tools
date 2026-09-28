@@ -22,6 +22,18 @@ from readwise_tools.models import Document
 NOW = datetime(2026, 9, 21, tzinfo=UTC)
 
 
+class _FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
+
+
+@pytest.fixture
+def frozen_now(monkeypatch):
+    """Pin the clock `cli` reads to NOW, for tests that go through `main()`."""
+    monkeypatch.setattr("readwise_tools.cli.datetime", _FrozenDatetime)
+
+
 def _doc(doc_id: str, days_ago: int) -> Document:
     return Document(
         id=doc_id,
@@ -129,6 +141,7 @@ def test_main_exits_nonzero_when_token_missing(monkeypatch, capsys):
     assert "READWISE_TOKEN" in captured.err
 
 
+@pytest.mark.usefixtures("frozen_now")
 @patch("readwise_tools.cli.fetch_documents")
 def test_main_dispatches_to_run_list_when_token_present(
     mock_fetch, monkeypatch, capsys
@@ -281,14 +294,11 @@ def test_build_parser_gazette_accepts_explicit_days_and_output():
 
 @patch("readwise_tools.cli.render_pdf")
 @patch("readwise_tools.cli.render_gazette")
-@patch("readwise_tools.cli.fetch_document_by_id")
 @patch("readwise_tools.cli.fetch_documents")
 def test_run_gazette_happy_path_uses_default_filename(
-    mock_fetch_list, mock_fetch_one, mock_render_gazette, mock_render_pdf, capsys
+    mock_fetch_list, mock_render_gazette, mock_render_pdf, capsys
 ):
-    mock_fetch_list.return_value = [_doc("a", 1), _doc("b", 2)]
-    full_docs = [_doc("a", 1), _doc("b", 2)]
-    mock_fetch_one.side_effect = full_docs
+    mock_fetch_list.return_value = [_doc("a", 1), _doc("b", 2), _doc("old", 8)]
     mock_render_gazette.return_value = "<html>gazette</html>"
     parser = build_parser()
     args = parser.parse_args(["gazette", "inbox"])
@@ -299,21 +309,23 @@ def test_run_gazette_happy_path_uses_default_filename(
     assert exit_code == 0
     expected_path = Path("gazette_inbox_2026-09-21.pdf")
     assert str(expected_path) in out
-    mock_fetch_one.assert_any_call(token="tok", doc_id="a")
-    mock_fetch_one.assert_any_call(token="tok", doc_id="b")
-    mock_render_gazette.assert_called_once_with(full_docs)
+    mock_fetch_list.assert_called_once_with(
+        token="tok",
+        location="new",
+        updated_after=NOW - timedelta(days=7),
+        with_html_content=True,
+    )
+    mock_render_gazette.assert_called_once_with([_doc("a", 1), _doc("b", 2)])
     mock_render_pdf.assert_called_once_with("<html>gazette</html>", expected_path)
 
 
 @patch("readwise_tools.cli.render_pdf")
 @patch("readwise_tools.cli.render_gazette")
-@patch("readwise_tools.cli.fetch_document_by_id")
 @patch("readwise_tools.cli.fetch_documents")
 def test_run_gazette_uses_explicit_output_path(
-    mock_fetch_list, mock_fetch_one, mock_render_gazette, mock_render_pdf
+    mock_fetch_list, mock_render_gazette, mock_render_pdf
 ):
     mock_fetch_list.return_value = [_doc("a", 1)]
-    mock_fetch_one.return_value = _doc("a", 1)
     mock_render_gazette.return_value = "<html>gazette</html>"
     parser = build_parser()
     args = parser.parse_args(["gazette", "inbox", "--output", "custom.pdf"])
@@ -354,13 +366,9 @@ def test_run_gazette_handles_auth_error_from_list_fetch(mock_fetch_list, capsys)
     assert "bad token" in captured.err
 
 
-@patch("readwise_tools.cli.fetch_document_by_id")
 @patch("readwise_tools.cli.fetch_documents")
-def test_run_gazette_handles_api_error_from_item_fetch(
-    mock_fetch_list, mock_fetch_one, capsys
-):
-    mock_fetch_list.return_value = [_doc("a", 1)]
-    mock_fetch_one.side_effect = ReadwiseAPIError("rate limited")
+def test_run_gazette_handles_api_error_from_list_fetch(mock_fetch_list, capsys):
+    mock_fetch_list.side_effect = ReadwiseAPIError("rate limited")
     parser = build_parser()
     args = parser.parse_args(["gazette", "inbox"])
 
@@ -371,13 +379,12 @@ def test_run_gazette_handles_api_error_from_item_fetch(
     assert "rate limited" in captured.err
 
 
+@pytest.mark.usefixtures("frozen_now")
 @patch("readwise_tools.cli.render_pdf")
 @patch("readwise_tools.cli.render_gazette")
-@patch("readwise_tools.cli.fetch_document_by_id")
 @patch("readwise_tools.cli.fetch_documents")
 def test_main_dispatches_to_run_gazette_when_token_present(
     mock_fetch_list,
-    mock_fetch_one,
     mock_render_gazette,
     mock_render_pdf,
     monkeypatch,
@@ -386,7 +393,6 @@ def test_main_dispatches_to_run_gazette_when_token_present(
     monkeypatch.setenv("READWISE_TOKEN", "tok")
     monkeypatch.setattr("sys.argv", ["readwise-tools", "gazette", "inbox"])
     mock_fetch_list.return_value = [_doc("a", 1)]
-    mock_fetch_one.return_value = _doc("a", 1)
     mock_render_gazette.return_value = "<html>gazette</html>"
 
     exit_code = main()
@@ -394,4 +400,6 @@ def test_main_dispatches_to_run_gazette_when_token_present(
     out = capsys.readouterr().out
     assert exit_code == 0
     assert "Wrote 1 document(s)" in out
-    mock_render_pdf.assert_called_once()
+    mock_render_pdf.assert_called_once_with(
+        "<html>gazette</html>", Path("gazette_inbox_2026-09-21.pdf")
+    )
